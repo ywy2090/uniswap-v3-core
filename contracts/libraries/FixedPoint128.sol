@@ -1,8 +1,45 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity >=0.4.0;
 
-/// @title FixedPoint128
-/// @notice A library for handling binary fixed point numbers, see https://en.wikipedia.org/wiki/Q_(number_format)
+/// @title FixedPoint128 - Q128 定点数库
+/// @notice 用于处理二进制定点数的库，提供 128 位精度
+/// @dev 参考：https://en.wikipedia.org/wiki/Q_(number_format)
+/// 
+/// Q128.128 格式说明：
+/// - 128 位整数部分 + 128 位小数部分
+/// - 总共 256 位（uint256）
+/// - 缩放因子：2^128
+/// 
+/// 用途：
+/// - 在费用累积计算中使用
+/// - 存储"每单位流动性的费用增长"
+/// - 提供极高精度，避免舍入误差
+/// 
+/// 为什么选择 128？
+/// 1. 使用完整的 uint256（256 位）
+/// 2. 128 位小数提供极高精度（约 38 位十进制精度）
+/// 3. 对于费用累积等需要长期累加的场景，精度至关重要
+/// 4. 避免因微小误差导致的费用损失
+/// 
+/// 应用场景：
+/// feeGrowthGlobal = Σ(feeAmount * 2^128 / liquidity)
+/// 这样即使费用很小，也能精确累积
 library FixedPoint128 {
+    /// @notice Q128 的缩放因子：2^128
+    /// @dev 0x100000000000000000000000000000000 = 2^128
+    ///      = 340,282,366,920,938,463,463,374,607,431,768,211,456
+    /// 
+    /// 使用方法：
+    /// - 将普通数转换为 Q128：value * Q128
+    /// - 将 Q128 转换为普通数：valueQ128 / Q128
+    /// 
+    /// 费用累积示例：
+    /// - 假设费用 = 1000 wei，流动性 = 1e18
+    /// - feeGrowth = (1000 * 2^128) / 1e18
+    /// - 这样即使单次费用很小，累积后仍能精确计算
+    /// 
+    /// LP 应得费用计算：
+    /// - lpFee = (feeGrowthNow - feeGrowthLast) * lpLiquidity / 2^128
+    /// - 即使经过数千次交易，误差仍在可接受范围
     uint256 internal constant Q128 = 0x100000000000000000000000000000000;
 }
