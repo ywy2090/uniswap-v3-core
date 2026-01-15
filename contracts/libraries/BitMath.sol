@@ -1,94 +1,195 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity >=0.5.0;
 
-/// @title BitMath
-/// @dev This library provides functionality for computing bit properties of an unsigned integer
+/// @title BitMath - 位运算数学库
+/// @dev 提供计算无符号整数位属性的功能
+/// @notice 用于高效查找最高有效位（MSB）和最低有效位（LSB）
+/// 
+/// 应用场景：
+/// - TickBitmap：快速查找已初始化的 tick
+/// - 对数计算：TickMath 中计算 tick
+/// - 位索引：高效的数据结构操作
+/// 
+/// 优化策略：
+/// - 使用二分查找而非逐位检查
+/// - 时间复杂度 O(log n) 而非 O(n)
+/// - 对于 256 位数，最多需要 8 次比较
 library BitMath {
-    /// @notice Returns the index of the most significant bit of the number,
-    ///     where the least significant bit is at index 0 and the most significant bit is at index 255
-    /// @dev The function satisfies the property:
-    ///     x >= 2**mostSignificantBit(x) and x < 2**(mostSignificantBit(x)+1)
-    /// @param x the value for which to compute the most significant bit, must be greater than 0
-    /// @return r the index of the most significant bit
+    /// @notice 返回数字最高有效位的索引
+    /// @dev 最低有效位的索引为 0，最高有效位的索引为 255
+    /// 
+    /// 属性保证：
+    /// x >= 2^mostSignificantBit(x) 且 x < 2^(mostSignificantBit(x)+1)
+    /// 
+    /// 算法思路（二分查找）：
+    /// 1. 检查高 128 位是否有值
+    /// 2. 如果有，右移 128 位，索引 += 128
+    /// 3. 递归检查剩余的 128/64/32/16/8/4/2/1 位
+    /// 4. 每次将搜索空间减半
+    /// 
+    /// 示例：
+    /// - mostSignificantBit(1) = 0     （2^0 = 1）
+    /// - mostSignificantBit(2) = 1     （2^1 = 2）
+    /// - mostSignificantBit(7) = 2     （2^2 <= 7 < 2^3）
+    /// - mostSignificantBit(255) = 7   （2^7 <= 255 < 2^8）
+    /// - mostSignificantBit(256) = 8   （2^8 = 256）
+    /// 
+    /// @param x 要计算 MSB 的值，必须大于 0
+    /// @return r 最高有效位的索引（0-255）
     function mostSignificantBit(uint256 x) internal pure returns (uint8 r) {
         require(x > 0);
 
+        // 第 1 步：检查高 128 位（位 128-255）
+        // 0x100000000000000000000000000000000 = 2^128
         if (x >= 0x100000000000000000000000000000000) {
-            x >>= 128;
-            r += 128;
+            x >>= 128;  // 右移 128 位，现在 x 在范围 [0, 2^128)
+            r += 128;   // MSB 至少在位 128
         }
+        
+        // 第 2 步：检查接下来的 64 位（位 64-127 或 192-255）
+        // 0x10000000000000000 = 2^64
         if (x >= 0x10000000000000000) {
             x >>= 64;
             r += 64;
         }
+        
+        // 第 3 步：检查接下来的 32 位
+        // 0x100000000 = 2^32
         if (x >= 0x100000000) {
             x >>= 32;
             r += 32;
         }
+        
+        // 第 4 步：检查接下来的 16 位
+        // 0x10000 = 2^16 = 65536
         if (x >= 0x10000) {
             x >>= 16;
             r += 16;
         }
+        
+        // 第 5 步：检查接下来的 8 位
+        // 0x100 = 2^8 = 256
         if (x >= 0x100) {
             x >>= 8;
             r += 8;
         }
+        
+        // 第 6 步：检查接下来的 4 位
+        // 0x10 = 2^4 = 16
         if (x >= 0x10) {
             x >>= 4;
             r += 4;
         }
+        
+        // 第 7 步：检查接下来的 2 位
+        // 0x4 = 2^2 = 4
         if (x >= 0x4) {
             x >>= 2;
             r += 2;
         }
+        
+        // 第 8 步：检查最后 1 位
+        // 0x2 = 2^1 = 2
+        // 如果 x >= 2，MSB 在位 1；否则在位 0
         if (x >= 0x2) r += 1;
+        
+        // 复杂度：最多 8 次比较（log_2(256) = 8）
+        // 比逐位检查快 32 倍！
     }
 
-    /// @notice Returns the index of the least significant bit of the number,
-    ///     where the least significant bit is at index 0 and the most significant bit is at index 255
-    /// @dev The function satisfies the property:
-    ///     (x & 2**leastSignificantBit(x)) != 0 and (x & (2**(leastSignificantBit(x)) - 1)) == 0)
-    /// @param x the value for which to compute the least significant bit, must be greater than 0
-    /// @return r the index of the least significant bit
+    /// @notice 返回数字最低有效位的索引
+    /// @dev 最低有效位的索引为 0，最高有效位的索引为 255
+    /// 
+    /// 属性保证：
+    /// (x & 2^leastSignificantBit(x)) != 0 且 (x & (2^leastSignificantBit(x) - 1)) == 0
+    /// 意思是：LSB 位为 1，且 LSB 右边的所有位都是 0
+    /// 
+    /// 算法思路（反向二分查找）：
+    /// 1. 从 r = 255 开始（假设 LSB 在最高位）
+    /// 2. 检查低 128 位是否有值
+    /// 3. 如果有，r -= 128（LSB 在低半部分）
+    /// 4. 否则，右移 128 位（忽略低 128 位的零）
+    /// 5. 递归检查剩余位
+    /// 
+    /// 与 MSB 的区别：
+    /// - MSB：从低位开始检查，找最高的 1
+    /// - LSB：从高位开始检查，找最低的 1
+    /// 
+    /// 示例：
+    /// - leastSignificantBit(1) = 0    （0b0001，位 0）
+    /// - leastSignificantBit(2) = 1    （0b0010，位 1）
+    /// - leastSignificantBit(4) = 2    （0b0100，位 2）
+    /// - leastSignificantBit(6) = 1    （0b0110，位 1）
+    /// - leastSignificantBit(8) = 3    （0b1000，位 3）
+    /// 
+    /// 应用：
+    /// - TickBitmap：在一个字中查找下一个已初始化的 tick
+    /// - 高效查找"第一个设置的位"
+    /// 
+    /// @param x 要计算 LSB 的值，必须大于 0
+    /// @return r 最低有效位的索引（0-255）
     function leastSignificantBit(uint256 x) internal pure returns (uint8 r) {
         require(x > 0);
 
+        // 从最高位开始，假设 LSB 在位 255
         r = 255;
+        
+        // 第 1 步：检查低 128 位（位 0-127）
+        // type(uint128).max = 2^128 - 1 = 所有低 128 位都是 1 的掩码
         if (x & type(uint128).max > 0) {
-            r -= 128;
+            r -= 128;  // LSB 在低 128 位
         } else {
-            x >>= 128;
+            x >>= 128;  // LSB 不在低 128 位，忽略它们
         }
+        
+        // 第 2 步：检查低 64 位
         if (x & type(uint64).max > 0) {
             r -= 64;
         } else {
             x >>= 64;
         }
+        
+        // 第 3 步：检查低 32 位
         if (x & type(uint32).max > 0) {
             r -= 32;
         } else {
             x >>= 32;
         }
+        
+        // 第 4 步：检查低 16 位
         if (x & type(uint16).max > 0) {
             r -= 16;
         } else {
             x >>= 16;
         }
+        
+        // 第 5 步：检查低 8 位
         if (x & type(uint8).max > 0) {
             r -= 8;
         } else {
             x >>= 8;
         }
+        
+        // 第 6 步：检查低 4 位
+        // 0xf = 0b1111 = 15
         if (x & 0xf > 0) {
             r -= 4;
         } else {
             x >>= 4;
         }
+        
+        // 第 7 步：检查低 2 位
+        // 0x3 = 0b11 = 3
         if (x & 0x3 > 0) {
             r -= 2;
         } else {
             x >>= 2;
         }
+        
+        // 第 8 步：检查最低 1 位
+        // 0x1 = 0b1 = 1
         if (x & 0x1 > 0) r -= 1;
+        
+        // 复杂度：O(log n) = 8 次比较
     }
 }

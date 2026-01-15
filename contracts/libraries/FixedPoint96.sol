@@ -1,10 +1,36 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity >=0.4.0;
 
-/// @title FixedPoint96
-/// @notice A library for handling binary fixed point numbers, see https://en.wikipedia.org/wiki/Q_(number_format)
-/// @dev Used in SqrtPriceMath.sol
+/// @title FixedPoint96 - Q96 定点数库
+/// @notice 用于处理二进制定点数的库
+/// @dev 参考：https://en.wikipedia.org/wiki/Q_(number_format)
+/// 
+/// Q64.96 格式说明：
+/// - Q 代表 "fixed point"（定点数）
+/// - 64.96 表示 64 位整数部分 + 96 位小数部分
+/// - 总共 160 位（uint160）
+/// - 缩放因子：2^96
+/// 
+/// 用途：在 SqrtPriceMath.sol 中用于高精度价格计算
+/// 
+/// 为什么选择 96？
+/// 1. uint160 可以表示任意以太坊地址
+/// 2. 96 位小数提供足够的精度（约 79 位十进制精度）
+/// 3. 与 256 位（uint256）配合良好：256 - 160 = 96
 library FixedPoint96 {
+    /// @notice Q96 的分辨率（精度位数）
+    /// @dev 表示小数部分有 96 位
     uint8 internal constant RESOLUTION = 96;
+    
+    /// @notice Q96 的缩放因子：2^96
+    /// @dev 0x1000000000000000000000000 = 2^96 = 79,228,162,514,264,337,593,543,950,336
+    /// 
+    /// 使用方法：
+    /// - 将普通数转换为 Q96：value * Q96
+    /// - 将 Q96 转换为普通数：valueQ96 / Q96
+    /// 
+    /// 示例：
+    /// - 价格 1.5 的 Q96 表示：1.5 * 2^96 ≈ 118,842,243,771,396,506,390,315,925,504
+    /// - 反向转换：118842243771396506390315925504 / 2^96 ≈ 1.5
     uint256 internal constant Q96 = 0x1000000000000000000000000;
 }
